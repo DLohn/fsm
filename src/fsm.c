@@ -8,8 +8,10 @@ int jvalcmp(Jval j1, Jval j2) {
     return memcmp(&j1, &j2, sizeof(Jval));
 }
 
+char defaultkey[8] = {0, 0, 1, 0, 0, 0, 0, 0};
+
 enum {ADD, REMOVE, ST, ST2};
-int add_remove_st_transition_general(FSM* fsm, uint startstate, Jval data_key, uint endstate, int func) {
+int add_remove_st_transition(FSM* fsm, uint startstate, Jval data_key, uint endstate, int func) {
     JRB state_transition_table;
     JRB inner_jrb;
     JRB found;
@@ -36,29 +38,34 @@ int add_remove_st_transition_general(FSM* fsm, uint startstate, Jval data_key, u
 
     found = jrb_find_gen(inner_jrb, data_key, &jvalcmp);
     
-    if (func == ST) {
+    if (func == ST || func == ST2) {
         if (found == NULL) {
-            return 0;
+            memcpy(data_key.carray, defaultkey, sizeof(defaultkey));
+            found = jrb_find_gen(inner_jrb, data_key, &jvalcmp);
         }
-        dll = (Dllist)(found->val.v);
-        dll_traverse(ptr, dll) {
-            if(ptr->val.i == endstate) {
-                fsm->currentstate = endstate;
-                return 1;
+
+        if (found != NULL) {
+            dll = (Dllist)(found->val.v);
+            if (func == ST) {
+                dll_traverse(ptr, dll) {
+                    if(ptr->val.i == endstate) {
+                        fsm->currentstate = endstate;
+                        return 1;
+                    }
+                }
+            }
+            else if (func == ST2) {
+                if (!dll_empty(dll)) {
+                    fsm->currentstate = dll_last(dll)->val.i;
+                    return 1;
+                }
             }
         }
+
+        if (fsm->usetrapstate) {
+            fsm->currentstate = fsm->trapstate;
+        }
         return 0;
-    }
-    else if (func == ST2) {
-        if (found == NULL) {
-            return 0;
-        }
-        dll = (Dllist)(found->val.v);
-        if (dll_empty(dll)) {
-            return 0;
-        }
-        fsm->currentstate = dll_last(dll)->val.i;
-        return 1;
     }
     else if (func == ADD) {
         if (found == NULL) {
@@ -134,24 +141,37 @@ Jval get_str_key(char* data) {
 void add_transition_int(FSM* fsm, uint startstate, int data, uint endstate) {
     Jval key;
     key = get_int_key(data);
-    add_remove_st_transition_general(fsm, startstate, key, endstate, ADD);
+    add_remove_st_transition(fsm, startstate, key, endstate, ADD);
 }
 
 void add_transition_str(FSM* fsm, uint startstate, char* data, uint endstate) {
     Jval key;
     key = get_str_key(data);
-    add_remove_st_transition_general(fsm, startstate, key, endstate, ADD);
+    add_remove_st_transition(fsm, startstate, key, endstate, ADD);
 }
 
 void remove_transition_int(FSM* fsm, uint startstate, int data, uint endstate) {
     Jval key;
     key = get_int_key(data);
-    add_remove_st_transition_general(fsm, startstate, key, endstate, REMOVE);
+    add_remove_st_transition(fsm, startstate, key, endstate, REMOVE);
 }
+
 void remove_transition_str(FSM* fsm, uint startstate, char* data, uint endstate) {
     Jval key;
     key = get_str_key(data);
-    add_remove_st_transition_general(fsm, startstate, key, endstate, REMOVE);
+    add_remove_st_transition(fsm, startstate, key, endstate, REMOVE);
+}
+
+void add_transition_def(FSM* fsm, uint startstate, uint endstate) {
+    Jval key;
+    memcpy(key.carray, defaultkey, sizeof(defaultkey));
+    add_remove_st_transition(fsm, startstate, key, endstate, ADD);
+    return;
+}
+void remove_transition_def(FSM* fsm, uint startstate, uint endstate) {
+    Jval key;
+    memcpy(key.carray, defaultkey, sizeof(defaultkey));
+    add_remove_st_transition(fsm, startstate, key, endstate, REMOVE);
 }
 
 int fsm_tostate_int(FSM* fsm, uint nextstate, int data) {
@@ -161,7 +181,7 @@ int fsm_tostate_int(FSM* fsm, uint nextstate, int data) {
     }
 
     key = get_int_key(data);
-    return add_remove_st_transition_general(fsm, fsm->currentstate, key, nextstate, ST);
+    return add_remove_st_transition(fsm, fsm->currentstate, key, nextstate, ST);
 }
 
 int fsm_tostate_str(FSM* fsm, uint nextstate, char* data) {
@@ -171,17 +191,17 @@ int fsm_tostate_str(FSM* fsm, uint nextstate, char* data) {
     }
 
     key = get_str_key(data);
-    return add_remove_st_transition_general(fsm, fsm->currentstate, key, nextstate, ST);
+    return add_remove_st_transition(fsm, fsm->currentstate, key, nextstate, ST);
 }
 
 int fsm_int(FSM* fsm, int data) {
     Jval key;
     key = get_int_key(data);
-    return add_remove_st_transition_general(fsm, fsm->currentstate, key, 0, ST2);
+    return add_remove_st_transition(fsm, fsm->currentstate, key, 0, ST2);
 }
 
 int fsm_str(FSM* fsm, char* data) {
     Jval key;
     key = get_str_key(data);
-    return add_remove_st_transition_general(fsm, fsm->currentstate, key, 0, ST2);
+    return add_remove_st_transition(fsm, fsm->currentstate, key, 0, ST2);
 }

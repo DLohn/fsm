@@ -5,19 +5,35 @@
 
 
 #define MAX_INPUT_SIZE 256
-enum {S0, S1, S2, S3, S4, S5, S6, S7, S8, S9, S10};
+enum {S0, S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S_TRAP};
 
 FSM my_fsm = {0};
 
+/*
+    2014 Minecraft username FSM: Accepts all strings that start with xX and end with Xx
+*/
 void fsm_def(FSM* fsm) {
-    add_transition_int(fsm, S0, '0', S1);
-    add_transition_int(fsm, S0, '1', S0);
 
-    add_transition_int(fsm, S1, '0', S9);
-    add_transition_int(fsm, S1, '1', S0);
+    fsm->usetrapstate = 1;
+    fsm->trapstate = S_TRAP;
 
-    add_transition_int(fsm, S9, '0', S9);
-    add_transition_int(fsm, S9, '1', S0);
+    /* Detect start */
+    add_transition_int(fsm, S0, 'x', S1);
+    add_transition_int(fsm, S1, 'X', S2);
+
+    /* Detect middle */
+    add_transition_def(fsm, S2, S2);
+
+    /* If X or Xx is typed, it's either (part of) the end or part of the middle */
+    add_transition_int(fsm, S2, 'X', S3);
+
+    add_transition_int(fsm, S3, 'X', S3);
+    add_transition_int(fsm, S3, 'x', S10);
+    add_transition_def(fsm, S3, S2);
+
+    add_transition_int(fsm, S10, 'X', S3);
+    add_transition_def(fsm, S10, S2);
+    
 }
 
 int accepting_state(FSM* fsm) {
@@ -53,7 +69,7 @@ int main() {
             printf("String accepted!\n");
         }
         else {
-            printf("String rejected!\n");
+            printf("String rejected!\n", my_fsm.currentstate);
         }
 
     }
